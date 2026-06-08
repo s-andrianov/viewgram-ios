@@ -566,6 +566,26 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
                     updatedMessages.append((transformedMedia, .message(text: sourceMessage.text, attributes: sourceMessage.attributes, inlineStickers: [:], mediaReference: mediaReference, threadId: threadId, replyToMessageId: threadId.flatMap { EngineMessageReplySubject(messageId: MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: Int32(clamping: $0)), quote: nil, innerSubject: nil) }, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])))
                     continue outer
                 }
+                // Fork: forwarding copy-protected (noforward) content is rejected by the server, so send a fresh copy instead
+                if let sourceMessage = transaction.getMessage(sourceId) {
+                    var sourceIsCopyProtected = sourceMessage.flags.contains(.CopyProtected)
+                    if let sourcePeer = transaction.getPeer(sourceMessage.id.peerId) {
+                        if let channel = sourcePeer as? TelegramChannel, channel.flags.contains(.copyProtectionEnabled) {
+                            sourceIsCopyProtected = true
+                        } else if let group = sourcePeer as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {
+                            sourceIsCopyProtected = true
+                        }
+                    }
+                    if sourceIsCopyProtected {
+                        var mediaReference: AnyMediaReference?
+                        if let media = sourceMessage.media.first {
+                            mediaReference = .standalone(media: media)
+                        }
+                        let copiedAttributes = sourceMessage.attributes.filter { $0 is TextEntitiesMessageAttribute }
+                        updatedMessages.append((transformedMedia, .message(text: sourceMessage.text, attributes: copiedAttributes, inlineStickers: [:], mediaReference: mediaReference, threadId: threadId, replyToMessageId: threadId.flatMap { EngineMessageReplySubject(messageId: MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: Int32(clamping: $0)), quote: nil, innerSubject: nil) }, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])))
+                        continue outer
+                    }
+                }
         }
         updatedMessages.append((transformedMedia, updatedMessage))
     }

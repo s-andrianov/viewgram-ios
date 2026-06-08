@@ -380,15 +380,13 @@ public extension Message {
     }
     
     func isCopyProtected() -> Bool {
-        if self.flags.contains(.CopyProtected) {
-            return true
-        } else if let group = self.peers[self.id.peerId] as? TelegramGroup, group.flags.contains(.copyProtectionEnabled) {
-            return true
-        } else if let channel = self.peers[self.id.peerId] as? TelegramChannel, channel.flags.contains(.copyProtectionEnabled) {
-            return true
-        } else {
-            return false
-        }
+        // Fork: ignore copy/forward restrictions
+        return false
+    }
+
+    // Fork: message was deleted by others/admins/author but kept locally
+    var isDeletedByOther: Bool {
+        return self.attributes.contains(where: { $0 is GloballyDeletedMessageAttribute })
     }
     
     func isSensitiveContent(platform: String) -> Bool {

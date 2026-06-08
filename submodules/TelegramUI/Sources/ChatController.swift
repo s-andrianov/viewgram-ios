@@ -704,7 +704,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         return interfaceState.withUpdatedEffectiveInputState(ChatTextInputState(inputText: chatInputStateStringWithAppliedEntities(link.message, entities: link.entities)))
                     })
                 }
-            case .hashTagSearch:
+            case .hashTagSearch, .messageEditHistory:
                 break
             }
         }
@@ -783,7 +783,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         
             if case let .customChatContents(customChatContents) = strongSelf.presentationInterfaceState.subject {
                 switch customChatContents.kind {
-                case .hashTagSearch:
+                case .hashTagSearch, .messageEditHistory:
                     return true
                 case let .quickReplyMessageInput(_, shortcutType):
                     if let historyView = strongSelf.chatDisplayNode.historyNode.originalHistoryView, historyView.entries.isEmpty {
@@ -2159,8 +2159,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 }
             }
 
-            let isSecret = strongSelf.presentationInterfaceState.copyProtectionEnabled || strongSelf.chatLocation.peerId?.namespace == Namespaces.Peer.SecretChat
-            let pinchController = makePinchController(sourceNode: sourceNode, disableScreenshots: isSecret, getContentAreaInScreenSpace: {
+            let pinchController = makePinchController(sourceNode: sourceNode, disableScreenshots: false, getContentAreaInScreenSpace: {
                 guard let strongSelf = self else {
                     return CGRect()
                 }
@@ -7467,18 +7466,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             self.checkedPeerChatServiceActions = true
             
             if case let .peer(peerId) = self.chatLocation, self.screenCaptureManager == nil {
-                if peerId.namespace == Namespaces.Peer.SecretChat {
-                    self.screenCaptureManager = ScreenCaptureDetectionManager(check: { [weak self] in
-                        if let strongSelf = self, strongSelf.traceVisibility() {
-                            if strongSelf.canReadHistoryValue {
-                                let _ = strongSelf.context.engine.messages.addSecretChatMessageScreenshot(peerId: peerId).startStandalone()
-                            }
-                            return true
-                        } else {
-                            return false
-                        }
-                    })
-                } else if peerId.isTelegramNotifications {
+                if peerId.isTelegramNotifications {
                     self.screenCaptureManager = ScreenCaptureDetectionManager(check: { [weak self] in
                         if let strongSelf = self, strongSelf.traceVisibility() {
                             let loginCodeRegex = try? NSRegularExpression(pattern: "\\b\\d{5,7}\\b", options: [])

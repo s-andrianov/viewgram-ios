@@ -266,7 +266,7 @@ extension ChatControllerImpl {
             
             let managingBot: Signal<ChatManagingBot?, NoError>
             if let peerId = chatLocation.peerId, peerId.namespace == Namespaces.Peer.CloudUser {
-                managingBot = context.engine.data.subscribe(
+                let resolvedManagingBot = context.engine.data.subscribe(
                     TelegramEngine.EngineData.Item.Peer.ChatManagingBot(id: peerId)
                 )
                 |> mapToSignal { result -> Signal<ChatManagingBot?, NoError> in
@@ -280,9 +280,22 @@ extension ChatControllerImpl {
                         guard let botPeer else {
                             return nil
                         }
-                        
+
                         return ChatManagingBot(bot: botPeer, isPaused: result.isPaused, canReply: result.canReply, settingsUrl: result.manageUrl)
                     }
+                }
+                |> distinctUntilChanged
+
+                let hideBusinessBotPanel = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.chatSettings])
+                |> map { sharedData -> Bool in
+                    let chatSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.chatSettings]?.get(ChatSettings.self) ?? ChatSettings.defaultSettings
+                    return chatSettings.hideBusinessBotPanel
+                }
+                |> distinctUntilChanged
+
+                managingBot = combineLatest(resolvedManagingBot, hideBusinessBotPanel)
+                |> map { managingBot, hideBusinessBotPanel -> ChatManagingBot? in
+                    return hideBusinessBotPanel ? nil : managingBot
                 }
                 |> distinctUntilChanged
             } else {
@@ -927,8 +940,8 @@ extension ChatControllerImpl {
                     var botMenuButton: BotMenuButton = .commands
                     var currentSendAsPeerId: PeerId?
                     var autoremoveTimeout: Int32?
-                    var copyProtectionEnabled: Bool = false
-                    var myCopyProtectionEnabled: Bool = false
+                    let copyProtectionEnabled: Bool = false
+                    let myCopyProtectionEnabled: Bool = false
                     var hasBirthdayToday = false
                     var peerVerification: PeerVerification?
                     if let peer = peerView.peers[peerView.peerId] {
@@ -939,12 +952,7 @@ extension ChatControllerImpl {
                                 peerVerification = cachedChannelData.verification
                             }
                         }
-                        if let cachedUserData = peerView.cachedData as? CachedUserData {
-                            copyProtectionEnabled = cachedUserData.flags.contains(.copyProtectionEnabled) || cachedUserData.flags.contains(.myCopyProtectionEnabled)
-                            myCopyProtectionEnabled = cachedUserData.flags.contains(.myCopyProtectionEnabled)
-                        } else {
-                            copyProtectionEnabled = peer.isCopyProtectionEnabled
-                        }
+                        // Fork: ignore copy/forward restrictions (copyProtectionEnabled / myCopyProtectionEnabled stay false)
                         if let cachedGroupData = peerView.cachedData as? CachedGroupData {
                             if !cachedGroupData.botInfos.isEmpty {
                                 hasBots = true
@@ -1822,6 +1830,8 @@ extension ChatControllerImpl {
                     switch customChatContents.kind {
                     case .hashTagSearch:
                         break
+                    case .messageEditHistory:
+                        self.state.chatTitleContent = .custom(title: [ChatTitleContent.TitleTextItem(id: AnyHashable(0), content: .text("История правок"))], subtitle: nil, isEnabled: false)
                     case let .quickReplyMessageInput(shortcut, shortcutType):
                         switch shortcutType {
                         case .generic:
@@ -2177,11 +2187,11 @@ extension ChatControllerImpl {
                         hasAutoTranslate,
                         ApplicationSpecificNotice.translationSuggestion(accountManager: context.sharedContext.accountManager)
                     ) |> mapToSignal { isPremium, isHidden, hasAutoTranslate, counterAndTimestamp -> Signal<ChatPresentationTranslationState?, NoError> in
-                        var maybeSuggestPremium = false
-                        if counterAndTimestamp.0 >= 3 {
-                            maybeSuggestPremium = true
-                        }
-                        if (isPremium || maybeSuggestPremium || hasAutoTranslate) && !isHidden {
+                        let _ = isPremium
+                        let _ = hasAutoTranslate
+                        let _ = counterAndTimestamp
+                        // Viewgram: chat translation unlocked for everyone (no premium gate).
+                        if !isHidden {
                             return chatTranslationState(context: context, peerId: peerId, threadId: chatLocation.threadId)
                             |> map { translationState -> ChatPresentationTranslationState? in
                                 if let translationState, !translationState.fromLang.isEmpty && (translationState.fromLang != baseLanguageCode || translationState.isEnabled) {

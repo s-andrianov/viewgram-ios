@@ -1146,7 +1146,8 @@ public final class SharedWakeupManager {
                     account.shouldBeServiceTaskMaster.set(.single(.never))
                 }
                 account.shouldExplicitelyKeepWorkerConnections.set(.single(tasks.backgroundAudio || tasks.importantTasks.pendingStoryCount != 0 || tasks.importantTasks.pendingMessageCount != 0))
-                account.shouldKeepOnlinePresence.set(.single(primary && self.inForeground))
+                // Viewgram "Невидимка": never report online presence when the mode is enabled.
+                account.shouldKeepOnlinePresence.set(.single(primary && self.inForeground && !ViewgramRuntimeSettings.invisibleEnabled))
                 account.shouldKeepBackgroundDownloadConnections.set(.single(tasks.backgroundDownloads))
             }
             

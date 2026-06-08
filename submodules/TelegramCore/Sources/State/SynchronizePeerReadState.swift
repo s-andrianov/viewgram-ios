@@ -225,6 +225,13 @@ private func validatePeerReadState(network: Network, postbox: Postbox, stateMana
 }
 
 private func pushPeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, readState: PeerReadState) -> Signal<PeerReadState, PeerReadStateValidationError> {
+    // Viewgram "Нечиталка": do not inform the server that incoming messages were
+    // read. We report the push as succeeded with the current local read state so
+    // the synchronization queue marks it confirmed and never retries; the read
+    // history request itself is simply never sent.
+    if ViewgramRuntimeSettings.noReadReceiptsEnabled {
+        return .single(readState)
+    }
     if peerId.namespace == Namespaces.Peer.SecretChat {
         return inputSecretChat(postbox: postbox, peerId: peerId)
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in

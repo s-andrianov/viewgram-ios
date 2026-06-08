@@ -314,6 +314,19 @@ public struct PresentationResourcesSettings {
     public static let support = renderSettingsIcon(name: "Item List/Icons/Support", backgroundColors: [colorOrange])
     public static let faq = renderSettingsIcon(name: "Item List/Icons/Faq", backgroundColors: [colorLightBlue])
     public static let tips = renderSettingsIcon(name: "Item List/Icons/Tips", backgroundColors: [UIColor(rgb: 0xffcc02)])
+
+    public static let viewgram = generateImage(CGSize(width: 30.0, height: 30.0), contextGenerator: { size, context in
+        let bounds = CGRect(origin: CGPoint(), size: size)
+        context.clear(bounds)
+        let path = UIBezierPath(roundedRect: bounds, cornerRadius: 7.0)
+        context.addPath(path.cgPath)
+        context.clip()
+        if let image = UIImage(bundleImageName: "Filled"), let cgImage = image.cgImage {
+            context.translateBy(x: 0.0, y: size.height)
+            context.scaleBy(x: 1.0, y: -1.0)
+            context.draw(cgImage, in: bounds)
+        }
+    })
         
     public static let changePhoneNumber = renderSettingsIcon(name: "Item List/Icons/ChangePhone", backgroundColors: [colorPurple])
     public static let deleteAddAccount = renderSettingsIcon(name: "Item List/Icons/Member", backgroundColors: [colorBlue])

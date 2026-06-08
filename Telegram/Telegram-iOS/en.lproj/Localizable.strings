@@ -11624,6 +11624,9 @@ Sorry for the inconvenience.";
 
 "ChatbotSetup.PermissionsSectionHeader" = "BOT PERMISSIONS";
 "ChatbotSetup.PermissionsSectionFooter" = "The bot can only reply on your behalf in chats that were active during the last 24h.";
+"ChatbotSetup.OtherSectionHeader" = "OTHER";
+"ChatbotSetup.HideBusinessBotPanel" = "Hide bot panel";
+"ChatbotSetup.HideBusinessBotPanelFooter" = "Hide the bot panel that is shown at the top of chats managed by the bot. Pinned messages will be displayed instead.";
 "ChatbotSetup.Permission.ReplyToMessages" = "Reply to Messages";
 
 "ChatbotSetup.BotAddAction" = "ADD";

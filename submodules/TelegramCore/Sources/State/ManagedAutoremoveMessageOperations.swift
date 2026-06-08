@@ -82,37 +82,17 @@ func managedAutoremoveMessageOperations(network: Network, postbox: Postbox, isRe
                     Logger.shared.log("Autoremove", "Performing autoremove for \(entry.messageId), isRemove: \(isRemove)")
 
                     if let message = transaction.getMessage(entry.messageId) {
-                        if message.id.peerId.namespace == Namespaces.Peer.SecretChat || isRemove {
+                        if message.id.peerId.namespace == Namespaces.Peer.SecretChat {
+                            // Keep the original secret-chat behaviour (the secret-chat protocol relies on it).
                             _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: [entry.messageId])
                         } else {
-                            transaction.updateMessage(message.id, update: { currentMessage in
-                                var storeForwardInfo: StoreMessageForwardInfo?
-                                if let forwardInfo = currentMessage.forwardInfo {
-                                    storeForwardInfo = StoreMessageForwardInfo(authorId: forwardInfo.author?.id, sourceId: forwardInfo.source?.id, sourceMessageId: forwardInfo.sourceMessageId, date: forwardInfo.date, authorSignature: forwardInfo.authorSignature, psaType: forwardInfo.psaType, flags: forwardInfo.flags)
-                                }
-                                var updatedMedia = currentMessage.media
-                                for i in 0 ..< updatedMedia.count {
-                                    if let _ = updatedMedia[i] as? TelegramMediaImage {
-                                        updatedMedia[i] = TelegramMediaExpiredContent(data: .image)
-                                    } else if let file = updatedMedia[i] as? TelegramMediaFile {
-                                        if file.isInstantVideo {
-                                            updatedMedia[i] = TelegramMediaExpiredContent(data: .videoMessage)
-                                        } else if file.isVoice {
-                                            updatedMedia[i] = TelegramMediaExpiredContent(data: .voiceMessage)
-                                        } else {
-                                            updatedMedia[i] = TelegramMediaExpiredContent(data: .file)
-                                        }
-                                    }
-                                }
-                                var updatedAttributes = currentMessage.attributes
-                                for i in 0 ..< updatedAttributes.count {
-                                    if let _ = updatedAttributes[i] as? AutoclearTimeoutMessageAttribute {
-                                        updatedAttributes.remove(at: i)
-                                        break
-                                    }
-                                }
-                                return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: currentMessage.tags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: updatedAttributes, media: updatedMedia))
-                            })
+                            // Fork: keep self-destruct / one-time / TTL cloud messages — cancel only the scheduled
+                            // removal, leaving the message, its media and its timeout attributes untouched. Stripping
+                            // AutoclearTimeoutMessageAttribute/AutoremoveTimeoutMessageAttribute (or replacing media with
+                            // expired content) would make `containsSecretMedia` return false, so the bubble would stop
+                            // rendering as secret media (flame / one-time icon) and instead fall back to a regular
+                            // auto-downloading bubble that spins forever on an already-unavailable resource.
+                            transaction.clearTimestampBasedAttribute(id: entry.messageId, tag: tag)
                         }
                     } else {
                         transaction.clearTimestampBasedAttribute(id: entry.messageId, tag: tag)

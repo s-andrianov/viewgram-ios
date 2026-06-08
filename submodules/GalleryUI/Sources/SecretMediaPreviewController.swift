@@ -417,19 +417,6 @@ public final class SecretMediaPreviewController: ViewController {
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         
-        if self.screenCaptureEventsDisposable == nil {
-            self.screenCaptureEventsDisposable = (screenCaptureEvents()
-            |> deliverOnMainQueue).start(next: { [weak self] _ in
-                if let strongSelf = self, strongSelf.traceVisibility() {
-                    if strongSelf.messageId.peerId.namespace == Namespaces.Peer.CloudUser {
-                        let _ = enqueueMessages(account: strongSelf.context.account, peerId: strongSelf.messageId.peerId, messages: [.message(text: "", attributes: [], inlineStickers: [:], mediaReference: .standalone(media: TelegramMediaAction(action: TelegramMediaActionType.historyScreenshot)), threadId: nil, replyToMessageId: nil, replyToStoryId: nil, localGroupingKey: nil, correlationId: nil, bubbleUpEmojiOrStickersets: [])]).start()
-                    } else if strongSelf.messageId.peerId.namespace == Namespaces.Peer.SecretChat {
-                        let _ = strongSelf.context.engine.messages.addSecretChatMessageScreenshot(peerId: strongSelf.messageId.peerId).start()
-                    }
-                }
-            })
-        }
-        
         var nodeAnimatesItself = false
         
         if let centralItemNode = self.controllerNode.pager.centralItemNode(), let message = self.messageView?.message {
@@ -528,7 +515,7 @@ public final class SecretMediaPreviewController: ViewController {
                 }
                                 
                 let entry = GalleryEntry(entry: MessageHistoryEntry(message: message, isRead: false, location: nil, monthLocation: nil, attributes: MutableMessageHistoryEntryAttributes(authorIsContact: false)))
-                guard let item = galleryItemForEntry(context: self.context, presentationData: self.presentationData, entry: entry, streamVideos: false, hideControls: true, isSecret: true, playbackRate: { nil }, peerIsCopyProtected: true, tempFilePath: tempFilePath, playbackCompleted: { [weak self] in
+                guard let item = galleryItemForEntry(context: self.context, presentationData: self.presentationData, entry: entry, streamVideos: false, hideControls: true, isSecret: true, playbackRate: { nil }, peerIsCopyProtected: false, tempFilePath: tempFilePath, playbackCompleted: { [weak self] in
                     if let self {
                         if self.currentNodeMessageIsViewOnce || (duration < 30.0 && !self.currentMessageIsDismissed) {
                             if let node = self.controllerNode.pager.centralItemNode() as? UniversalVideoGalleryItemNode {

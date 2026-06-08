@@ -176,6 +176,7 @@ enum PeerInfoSettingsSection {
     case support
     case faq
     case tips
+    case viewgram
     case phoneNumber
     case username
     case addAccount

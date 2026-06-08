@@ -576,6 +576,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 context: item.context,
                 presentationData: item.presentationData,
                 edited: edited && !sentViaBot && !item.presentationData.isPreview,
+                deleted: item.message.isDeletedByOther,
                 impressionCount: !item.presentationData.isPreview ? viewCount : nil,
                 dateText: dateText,
                 type: statusType,

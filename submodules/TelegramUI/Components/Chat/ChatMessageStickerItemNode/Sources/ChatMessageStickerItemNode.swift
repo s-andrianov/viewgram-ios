@@ -654,6 +654,7 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                 context: item.context,
                 presentationData: item.presentationData,
                 edited: edited,
+                deleted: item.message.isDeletedByOther,
                 impressionCount: viewCount,
                 dateText: dateText,
                 type: statusType,

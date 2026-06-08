@@ -1226,6 +1226,7 @@ public enum ChatCustomContentsKind: Equatable {
     case quickReplyMessageInput(shortcut: String, shortcutType: ChatQuickReplyShortcutType)
     case businessLinkSetup(link: TelegramBusinessChatLinks.Link)
     case hashTagSearch(publicPosts: Bool)
+    case messageEditHistory
 }
 
 public protocol ChatCustomContentsProtocol: AnyObject {

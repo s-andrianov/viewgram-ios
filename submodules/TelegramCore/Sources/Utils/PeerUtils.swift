@@ -18,6 +18,11 @@ public extension Peer {
     }
     
     func restrictionText(platform: String, contentSettings: ContentSettings) -> String? {
+        // Fork: do not restrict access to blocked/restricted peers — show them as normal
+        return nil
+    }
+
+    var hasRestrictionRules: Bool {
         var restrictionInfo: PeerAccessRestrictionInfo?
         switch self {
         case let user as TelegramUser:
@@ -27,22 +32,10 @@ public extension Peer {
         default:
             break
         }
-        
-        if let restrictionInfo = restrictionInfo {
-            for rule in restrictionInfo.rules {
-                if rule.reason == "sensitive" {
-                    continue
-                }
-                if rule.platform == "all" || rule.platform == platform || contentSettings.addContentRestrictionReasons.contains(rule.platform) {
-                    if !contentSettings.ignoreContentRestrictionReasons.contains(rule.reason) {
-                        return rule.text
-                    }
-                }
-            }
-            return nil
-        } else {
-            return nil
+        if let restrictionInfo {
+            return restrictionInfo.rules.contains(where: { $0.reason != "sensitive" })
         }
+        return false
     }
         
     var addressName: String? {
@@ -234,14 +227,8 @@ public extension Peer {
     }
     
     var isCopyProtectionEnabled: Bool {
-        switch self {
-        case let group as TelegramGroup:
-            return group.flags.contains(.copyProtectionEnabled)
-        case let channel as TelegramChannel:
-            return channel.flags.contains(.copyProtectionEnabled)
-        default:
-            return false
-        }
+        // Fork: ignore copy/forward restrictions
+        return false
     }
     
     func hasSensitiveContent(platform: String) -> Bool {

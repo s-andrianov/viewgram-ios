@@ -299,19 +299,20 @@ filegroup(
     ]),
 )
 
+filegroup(
+    name = "PrimaryAppIcon",
+    srcs = glob([
+        "Telegram-iOS/AppIcon.xcassets/**/*",
+    ]),
+)
+
 alternate_icon_folders = [
-    "BlackIcon",
-    "BlackClassicIcon",
-    "BlackFilledIcon",
-    "BlueIcon",
-    "BlueClassicIcon",
-    "BlueFilledIcon",
-    "WhiteFilledIcon",
-    "New1",
-    "New2",
-    "Premium",
-    "PremiumBlack",
-    "PremiumTurbo",
+    "WhiteBlack",
+    "WhiteDefault",
+    "Default",
+    "Filled",
+    "FilledBlack",
+    "MonoBlack",
 ]
 
 composer_icon_folders = ["Telegram"]
@@ -513,7 +514,7 @@ siri_fragment = "" if not telegram_enable_siri else """
 <true/>
 """
 
-aps_fragment = "" if telegram_aps_environment == "" else """
+aps_fragment = "" if (telegram_aps_environment == "" or telegram_bundle_id not in official_bundle_ids) else """
 <key>aps-environment</key>
 <string>{telegram_aps_environment}</string>
 """.format(telegram_aps_environment=telegram_aps_environment)
@@ -612,7 +613,7 @@ plist_fragment(
     template =
     """
     <key>CFBundleDisplayName</key>
-    <string>Telegram</string>
+    <string>Viewgram</string>
     """
 )
 
@@ -1551,7 +1552,7 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Telegram</string>
+    <string>Viewgram</string>
     <key>CFBundleIdentifier</key>
     <string>{telegram_bundle_id}</string>
     <key>CFBundleName</key>
@@ -1743,7 +1744,7 @@ ios_application(
         ":RequiredDeviceCapabilitiesPlist",
         ":UrlTypesInfoPlist",
     ],
-    app_icons = [ ":{}_icon".format(name) for name in composer_icon_folders ],
+    app_icons = [ ":PrimaryAppIcon" ],
     alternate_icons = [
         ":{}".format(name) for name in alternate_icon_folders
     ],

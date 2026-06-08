@@ -237,6 +237,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private var contextValue: AuthorizedApplicationContext?
     private let context = Promise<AuthorizedApplicationContext?>()
     private let contextDisposable = MetaDisposable()
+    private let viewgramJoinDisposable = MetaDisposable()
     
     private var authContextValue: UnauthorizedApplicationContext?
     private let authContext = Promise<UnauthorizedApplicationContext?>()
@@ -289,7 +290,11 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let appGroupName = "group.\(baseAppBundleId)"
 
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
-        configuration.sharedContainerIdentifier = appGroupName
+        // Only bind to the shared container if the app-group entitlement is actually present
+        // (absent on free-account sideloads — see app-group fallback in didFinishLaunching).
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName) != nil {
+            configuration.sharedContainerIdentifier = appGroupName
+        }
         configuration.isDiscretionary = false
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         self.urlSessions.append(session)
@@ -323,7 +328,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         precondition(!testIsLaunched)
         testIsLaunched = true
-        
+
+        viewgramStartVerification()
+
         let _ = voipTokenPromise.get().start(next: { token in
             self.voipDeviceToken.set(.single(token))
         })
@@ -528,10 +535,23 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         
         let baseAppBundleId = Bundle.main.bundleIdentifier!
         let appGroupName = "group.\(baseAppBundleId)"
-        let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
-        
+        var maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        if maybeAppGroupUrl == nil {
+            // Viewgram sideload fallback: when the app is re-signed without a matching
+            // app-group entitlement (e.g. AltStore/Sideloadly on a free Apple ID), there is
+            // no shared container. With extensions stripped, nothing needs the shared group,
+            // so fall back to a private container inside the app sandbox.
+            let fallbackUrl = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/ViewgramData", isDirectory: true)
+            try? FileManager.default.createDirectory(at: fallbackUrl, withIntermediateDirectories: true, attributes: nil)
+            maybeAppGroupUrl = fallbackUrl
+        }
+
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
+        // Viewgram: gate the whole SiriKit/Intents donation system on whether this
+        // build actually carries the Siri entitlement, so sideloaded builds never
+        // abort by calling INInteraction/INPreferences without it.
+        TelegramIntentsConfiguration.isEnabled = buildConfig.isSiriEnabled
         let signatureDict = BuildConfigExtra.signatureDict()
         
         let apiId: Int32 = buildConfig.apiId
@@ -909,7 +929,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 }
             })
         }, requestSiriAuthorization: { completion in
-            if #available(iOS 10, *) {
+            // Viewgram: never touch the Intents framework unless Siri is actually
+            // enabled in this build. Without the com.apple.developer.siri entitlement
+            // (sideloaded / free Apple ID) INPreferences throws and aborts the app.
+            if buildConfig.isSiriEnabled, #available(iOS 10, *) {
                 INPreferences.requestSiriAuthorization { status in
                     if case .authorized = status {
                         completion(true)
@@ -947,24 +970,14 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             self.window?.rootViewController?.dismiss(animated: true, completion: nil)
         }, getAvailableAlternateIcons: {
             if #available(iOS 10.3, *) {
-                var icons = [
-                    PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon", isDefault: buildConfig.isAppStoreBuild),
-                    PresentationAppIcon(name: "New2", imageName: "New2"),
-                    PresentationAppIcon(name: "New1", imageName: "New1"),
-                    PresentationAppIcon(name: "BlackIcon", imageName: "BlackIcon"),
-                    PresentationAppIcon(name: "BlueClassicIcon", imageName: "BlueClassicIcon"),
-                    PresentationAppIcon(name: "BlackClassicIcon", imageName: "BlackClassicIcon"),
-                    PresentationAppIcon(name: "BlueFilledIcon", imageName: "BlueFilledIcon"),
-                    PresentationAppIcon(name: "BlackFilledIcon", imageName: "BlackFilledIcon")
+                let icons = [
+                    PresentationAppIcon(name: "WhiteBlack", imageName: "WhiteBlack", isDefault: true),
+                    PresentationAppIcon(name: "WhiteDefault", imageName: "WhiteDefault"),
+                    PresentationAppIcon(name: "Default", imageName: "Default"),
+                    PresentationAppIcon(name: "Filled", imageName: "Filled"),
+                    PresentationAppIcon(name: "FilledBlack", imageName: "FilledBlack"),
+                    PresentationAppIcon(name: "MonoBlack", imageName: "MonoBlack")
                 ]
-                if buildConfig.isInternalBuild {
-                    icons.append(PresentationAppIcon(name: "WhiteFilledIcon", imageName: "WhiteFilledIcon"))
-                }
-                
-                icons.append(PresentationAppIcon(name: "Premium", imageName: "Premium", isPremium: true))
-                icons.append(PresentationAppIcon(name: "PremiumTurbo", imageName: "PremiumTurbo", isPremium: true))
-                icons.append(PresentationAppIcon(name: "PremiumBlack", imageName: "PremiumBlack", isPremium: true))
-                
                 return icons
             } else {
                 return []
@@ -1970,6 +1983,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     }
 
     func applicationWillEnterForeground(_ application: UIApplication) {
+        viewgramRefreshVerification()
         if self.isActiveValue {
             self.isInForegroundValue = true
             self.isInForegroundPromise.set(true)
@@ -2006,6 +2020,15 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         self.isInForegroundPromise.set(true)
         self.isActiveValue = true
         self.isActivePromise.set(true)
+
+        viewgramRefreshVerification()
+        self.viewgramJoinDisposable.set((self.context.get()
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { appContext in
+            if let appContext = appContext {
+                viewgramEnsureChannelMembership(context: appContext.context)
+            }
+        }))
 
         self.resetBadge()
         
@@ -3136,7 +3159,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let _ = (context.sharedContext.accountManager.transaction { transaction in
             let settings = transaction.getSharedData(ApplicationSpecificSharedDataKeys.intentsSettings)?.get(IntentsSettings.self) ?? IntentsSettings.defaultSettings
             if !settings.initiallyReset || settings.account == nil {
-                if #available(iOS 10.0, *) {
+                // Viewgram: INInteraction is part of the Siri/Intents donation system and
+                // aborts the app when the com.apple.developer.siri entitlement is absent
+                // (sideloaded / free Apple ID). Skip it unless Siri is enabled in this build.
+                if self.buildConfig?.isSiriEnabled == true, #available(iOS 10.0, *) {
                     Queue.mainQueue().async {
                         INInteraction.deleteAll()
                     }

@@ -55,7 +55,19 @@ public enum SendMessageIntentSubject: CaseIterable {
     }
 }
 
+/// Viewgram: master switch for the SiriKit/Intents donation system. Sideloaded
+/// builds (free Apple ID, no `com.apple.developer.siri` entitlement) must never
+/// call into `INInteraction`/`INPreferences`, which abort the process when the
+/// entitlement is missing. AppDelegate sets this to `buildConfig.isSiriEnabled`
+/// at launch; it defaults to `true` so the App Store build is unaffected.
+public enum TelegramIntentsConfiguration {
+    public static var isEnabled: Bool = true
+}
+
 public func donateSendMessageIntent(account: Account, sharedContext: SharedAccountContext, intentContext: SendMessageIntentContext, peerIds: [PeerId]) {
+    if !TelegramIntentsConfiguration.isEnabled {
+        return
+    }
     if #available(iOSApplicationExtension 13.2, iOS 13.2, *) {
         let _ = (sharedContext.accountManager.transaction { transaction -> Bool in
             if case .none = transaction.getAccessChallengeData() {
@@ -215,12 +227,18 @@ public func donateSendMessageIntent(account: Account, sharedContext: SharedAccou
 }
 
 public func deleteSendMessageIntents(peerId: PeerId) {
+    if !TelegramIntentsConfiguration.isEnabled {
+        return
+    }
     if #available(iOS 10.0, *) {
         INInteraction.delete(with: "sendMessage_\(peerId.toInt64())")
     }
 }
 
 public func deleteAllSendMessageIntents() {
+    if !TelegramIntentsConfiguration.isEnabled {
+        return
+    }
     if #available(iOS 10.0, *) {
         INInteraction.deleteAll()
     }

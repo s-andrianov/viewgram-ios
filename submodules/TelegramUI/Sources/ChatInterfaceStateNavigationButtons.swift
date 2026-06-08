@@ -60,7 +60,7 @@ func leftNavigationButtonForChatInterfaceState(_ presentationInterfaceState: Cha
     
     if case let .customChatContents(customChatContents) = presentationInterfaceState.subject {
         switch customChatContents.kind {
-        case .hashTagSearch:
+        case .hashTagSearch, .messageEditHistory:
             break
         case .quickReplyMessageInput, .businessLinkSetup:
             if let currentButton = currentButton, currentButton.action == .dismiss {
@@ -171,7 +171,7 @@ func rightNavigationButtonForChatInterfaceState(context: AccountContext, present
     
     if case let .customChatContents(customChatContents) = presentationInterfaceState.subject {
         switch customChatContents.kind {
-        case .hashTagSearch:
+        case .hashTagSearch, .messageEditHistory:
             return nil
         case let .quickReplyMessageInput(_, shortcutType):
             switch shortcutType {

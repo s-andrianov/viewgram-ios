@@ -610,7 +610,7 @@ private final class ChatEmptyNodeCloudChatContent: ASDisplayNode, ChatEmptyNodeC
                 insets.top = -9.0
                 imageSpacing = 4.0
                 titleSpacing = 5.0
-            case .hashTagSearch:
+            case .hashTagSearch, .messageEditHistory:
                 break
             }
         }
@@ -671,7 +671,7 @@ private final class ChatEmptyNodeCloudChatContent: ASDisplayNode, ChatEmptyNodeC
                     }
                     
                     self.businessLink = link
-                case .hashTagSearch:
+                case .hashTagSearch, .messageEditHistory:
                     titleString = ""
                     strings = []
                 }

@@ -57,7 +57,7 @@ func serviceTasksForChatPresentationIntefaceState(context: AccountContext, chatP
 func inputContextQueriesForChatPresentationIntefaceState(_ chatPresentationInterfaceState: ChatPresentationInterfaceState) -> [ChatPresentationInputQuery] {
     if case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject {
         switch customChatContents.kind {
-        case .hashTagSearch:
+        case .hashTagSearch, .messageEditHistory:
             return []
         case .quickReplyMessageInput:
             break
@@ -244,7 +244,7 @@ func inputTextPanelStateForChatPresentationInterfaceState(_ chatPresentationInte
                 
                 if case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject {
                     switch customChatContents.kind {
-                    case .hashTagSearch:
+                    case .hashTagSearch, .messageEditHistory:
                         break
                     case .quickReplyMessageInput:
                         break

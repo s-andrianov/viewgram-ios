@@ -26,6 +26,7 @@ enum SettingsSection: Int, CaseIterable {
     case payment
     case extra
     case support
+    case viewgram
 }
 
 func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
@@ -326,7 +327,11 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.support]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.Settings_Tips, icon: PresentationResourcesSettings.tips, action: {
         interaction.openSettings(.tips)
     }))
-    
+
+    items[.viewgram]!.append(PeerInfoScreenDisclosureItem(id: 0, text: "Viewgram", icon: PresentationResourcesSettings.viewgram, action: {
+        interaction.openSettings(.viewgram)
+    }))
+
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
     for section in SettingsSection.allCases {
         if let sectionItems = items[section], !sectionItems.isEmpty {

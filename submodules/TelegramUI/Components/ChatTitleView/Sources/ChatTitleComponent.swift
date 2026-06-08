@@ -454,7 +454,7 @@ public final class ChatTitleComponent: Component {
                                 titleCredibilityIcon = .premium
                             }
                             
-                            if peer.isVerified {
+                            if peer.isVerified || viewgramIsVerified(peer.id) {
                                 titleCredibilityIcon = .verified
                             }
                             if let verificationIconFileId = peer.verificationIconFileId {

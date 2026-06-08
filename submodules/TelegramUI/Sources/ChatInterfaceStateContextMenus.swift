@@ -2217,7 +2217,15 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             if !actions.isEmpty {
                 actions.insert(.separator, at: 0)
             }
-            actions.insert(.custom(ChatReadReportContextItem(context: context, message: message, hasReadReports: false, isEdit: true, stats: MessageReadStats(reactionCount: 0, peers: [], readTimestamps: [:]), action: nil), false), at: 0)
+            actions.insert(.custom(ChatReadReportContextItem(context: context, message: message, hasReadReports: false, isEdit: true, stats: MessageReadStats(reactionCount: 0, peers: [], readTimestamps: [:]), action: { _, f, _, _, _ in
+                f(.dismissWithoutContent)
+                // Fork: open the cached edit-history screen
+                let versions = (message.attributes.first(where: { $0 is EditHistoryMessageAttribute }) as? EditHistoryMessageAttribute)?.versions ?? []
+                let contents = EditHistoryChatContents(context: context, message: message, versions: versions)
+                let chatController = context.sharedContext.makeChatController(context: context, chatLocation: .customChatContents, subject: .customChatContents(contents: contents), botStart: nil, mode: .standard(.default), params: nil)
+                chatController.navigationPresentation = .modal
+                controllerInteraction.navigationController()?.pushViewController(chatController)
+            }), false), at: 0)
         }
         
         if !actions.isEmpty, case .separator = actions[0] {
@@ -2226,7 +2234,7 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         
         if let message = messages.first, case let .customChatContents(customChatContents) = chatPresentationInterfaceState.subject {
             switch customChatContents.kind {
-            case .hashTagSearch:
+            case .hashTagSearch, .messageEditHistory:
                 break
             case .quickReplyMessageInput:
                 actions.removeAll()
@@ -3349,6 +3357,11 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
             })
         }
         
+        if self.item.isEdit {
+            // Fork: make the edit-history label tappable when an action is provided
+            self.buttonNode.isUserInteractionEnabled = self.item.action != nil
+        }
+
         if !self.item.isEdit {
             item.context.account.viewTracker.updateReactionsForMessageIds(messageIds: [item.message.id], force: true)
         }
@@ -3698,7 +3711,8 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
             return false
         }
         if self.item.isEdit {
-            return false
+            // Fork: edit-history label is tappable when an action is provided
+            return true
         }
         if self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser {
             if let stats = self.currentStats, stats.peers.isEmpty {

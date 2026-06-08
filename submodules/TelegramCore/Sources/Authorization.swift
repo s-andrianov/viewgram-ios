@@ -4,6 +4,37 @@ import SwiftSignalKit
 import TelegramApi
 import MtProtoKit
 
+// Viewgram: reading `NSUbiquitousKeyValueStore.default` initialises CloudKit, which TRAPS
+// (EXC_BREAKPOINT) when the app is signed without a valid iCloud/ubiquity entitlement
+// (e.g. sideloaded with a free Apple ID). Gate every access behind an availability check so
+// the shared-login-token sync is simply skipped instead of crashing the app at launch/login.
+private var viewgramICloudAvailable: Bool {
+    return FileManager.default.ubiquityIdentityToken != nil
+}
+
+private func viewgramCloudLoginTokens() -> [Data] {
+    guard viewgramICloudAvailable else {
+        return []
+    }
+    guard let list = NSUbiquitousKeyValueStore.default.object(forKey: "T_SLTokens") as? [String] else {
+        return []
+    }
+    return list.compactMap { string -> Data? in
+        guard let stringData = string.data(using: .utf8) else {
+            return nil
+        }
+        return Data(base64Encoded: stringData)
+    }
+}
+
+private func viewgramSetCloudLoginTokens(_ tokens: [Data]) {
+    guard viewgramICloudAvailable else {
+        return
+    }
+    NSUbiquitousKeyValueStore.default.set(tokens.map { $0.base64EncodedString() }, forKey: "T_SLTokens")
+    NSUbiquitousKeyValueStore.default.synchronize()
+}
+
 
 public enum AuthorizationCodeRequestError {
     case invalidPhoneNumber
@@ -89,15 +120,7 @@ func storeFutureLoginToken(accountManager: AccountManager<TelegramAccountManager
         tokens.removeAll()
         #endif
         
-        var cloudValue: [Data] = []
-        if let list = NSUbiquitousKeyValueStore.default.object(forKey: "T_SLTokens") as? [String] {
-            cloudValue = list.compactMap { string -> Data? in
-                guard let stringData = string.data(using: .utf8) else {
-                    return nil
-                }
-                return Data(base64Encoded: stringData)
-            }
-        }
+        let cloudValue = viewgramCloudLoginTokens()
         for data in cloudValue {
             if !tokens.contains(data) {
                 tokens.insert(data, at: 0)
@@ -107,9 +130,8 @@ func storeFutureLoginToken(accountManager: AccountManager<TelegramAccountManager
         if tokens.count > 20 {
             tokens.removeLast(tokens.count - 20)
         }
-        
-        NSUbiquitousKeyValueStore.default.set(tokens.map { $0.base64EncodedString() }, forKey: "T_SLTokens")
-        NSUbiquitousKeyValueStore.default.synchronize()
+
+        viewgramSetCloudLoginTokens(tokens)
         
         transaction.setStoredLoginTokens(tokens)
     }).start()
@@ -142,15 +164,7 @@ func sendFirebaseAuthorizationCode(network: Network, phoneNumber: String, apiId:
 }
 
 public func sendAuthorizationCode(accountManager: AccountManager<TelegramAccountManagerTypes>, account: UnauthorizedAccount, phoneNumber: String, apiId: Int32, apiHash: String, pushNotificationConfiguration: AuthorizationCodePushNotificationConfiguration?, firebaseSecretStream: Signal<[String: String], NoError>, syncContacts: Bool, disableAuthTokens: Bool = false, forcedPasswordSetupNotice: @escaping (Int32) -> (NoticeEntryKey, CodableEntry)?) -> Signal<SendAuthorizationCodeResult, AuthorizationCodeRequestError> {
-    var cloudValue: [Data] = []
-    if let list = NSUbiquitousKeyValueStore.default.object(forKey: "T_SLTokens") as? [String] {
-        cloudValue = list.compactMap { string -> Data? in
-            guard let stringData = string.data(using: .utf8) else {
-                return nil
-            }
-            return Data(base64Encoded: stringData)
-        }
-    }
+    let cloudValue = viewgramCloudLoginTokens()
     return accountManager.transaction { transaction -> [Data] in
         return transaction.getStoredLoginTokens()
     }

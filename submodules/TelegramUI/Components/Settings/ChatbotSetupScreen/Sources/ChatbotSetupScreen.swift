@@ -154,6 +154,7 @@ final class ChatbotSetupScreenComponent: Component {
         private let excludedSection = ComponentView<Empty>()
         private let excludedUsersSection = ComponentView<Empty>()
         private let permissionsSection = ComponentView<Empty>()
+        private let otherSection = ComponentView<Empty>()
         
         private var isUpdating: Bool = false
         
@@ -177,8 +178,10 @@ final class ChatbotSetupScreenComponent: Component {
         
         private var permissions: [Permission] = []
         private var botRights: TelegramBusinessBotRights = []
-        
+
         private var temporaryEnabledPermissions = Set<String>()
+
+        private var hideBusinessBotPanel: Bool = false
         
         override init(frame: CGRect) {
             self.scrollView = ScrollView()
@@ -577,6 +580,8 @@ final class ChatbotSetupScreenComponent: Component {
             self.environment = environment
             
             if self.component == nil {
+                self.hideBusinessBotPanel = component.initialData.hideBusinessBotPanel
+
                 if let bot = component.initialData.bot, let botPeer = component.initialData.botPeer, let addressName = botPeer.addressName {
                     self.botResolutionState = BotResolutionState(query: addressName, state: .found(peer: botPeer, isInstalled: true))
                     self.resetQueryText = addressName.lowercased()
@@ -1366,7 +1371,70 @@ final class ChatbotSetupScreenComponent: Component {
                     permissionsSectionView.removeFromSuperview()
                 })
             }
-            
+
+            contentHeight += sectionSpacing
+
+            let otherSectionSize = self.otherSection.update(
+                transition: transition,
+                component: AnyComponent(ListSectionComponent(
+                    theme: environment.theme,
+                    style: .glass,
+                    header: AnyComponent(MultilineTextComponent(
+                        text: .plain(NSAttributedString(
+                            string: "ПРОЧЕЕ",
+                            font: Font.regular(presentationData.listsFontSize.itemListBaseHeaderFontSize),
+                            textColor: environment.theme.list.freeTextColor
+                        )),
+                        maximumNumberOfLines: 0
+                    )),
+                    footer: AnyComponent(MultilineTextComponent(
+                        text: .plain(NSAttributedString(
+                            string: "Скрыть панель бота, которая отображается вверху чатов, управляемых ботом. Вместо неё будут показаны закреплённые сообщения.",
+                            font: Font.regular(presentationData.listsFontSize.itemListBaseHeaderFontSize),
+                            textColor: environment.theme.list.freeTextColor
+                        )),
+                        maximumNumberOfLines: 0
+                    )),
+                    items: [
+                        AnyComponentWithIdentity(id: 0, component: AnyComponent(ListActionItemComponent(
+                            theme: environment.theme,
+                            style: .glass,
+                            title: AnyComponent(VStack([
+                                AnyComponentWithIdentity(id: AnyHashable(0), component: AnyComponent(MultilineTextComponent(
+                                    text: .plain(NSAttributedString(
+                                        string: "Скрыть панель бота",
+                                        font: Font.regular(presentationData.listsFontSize.baseDisplaySize),
+                                        textColor: environment.theme.list.itemPrimaryTextColor
+                                    )),
+                                    maximumNumberOfLines: 1
+                                ))),
+                            ], alignment: .left, spacing: 2.0)),
+                            accessory: .toggle(ListActionItemComponent.Toggle(style: .regular, isOn: self.hideBusinessBotPanel, action: { [weak self] value in
+                                guard let self, let component = self.component else {
+                                    return
+                                }
+                                self.hideBusinessBotPanel = value
+                                let _ = updateChatSettingsInteractively(accountManager: component.context.sharedContext.accountManager, { settings in
+                                    return settings.withUpdatedHideBusinessBotPanel(value)
+                                }).startStandalone()
+                                self.state?.updated(transition: .immediate)
+                            })),
+                            action: nil
+                        )))
+                    ]
+                )),
+                environment: {},
+                containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 10000.0)
+            )
+            let otherSectionFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: otherSectionSize)
+            if let otherSectionView = self.otherSection.view {
+                if otherSectionView.superview == nil {
+                    self.scrollView.addSubview(otherSectionView)
+                }
+                transition.setFrame(view: otherSectionView, frame: otherSectionFrame)
+            }
+            contentHeight += otherSectionSize.height
+
             contentHeight += bottomContentInset
             contentHeight += environment.safeInsets.bottom
             
@@ -1414,15 +1482,18 @@ public final class ChatbotSetupScreen: ViewControllerComponentContainer {
         fileprivate let bot: TelegramAccountConnectedBot?
         fileprivate let botPeer: EnginePeer?
         fileprivate let additionalPeers: [EnginePeer.Id: ChatbotSetupScreenComponent.AdditionalPeerList.Peer]
-        
+        fileprivate let hideBusinessBotPanel: Bool
+
         fileprivate init(
             bot: TelegramAccountConnectedBot?,
             botPeer: EnginePeer?,
-            additionalPeers: [EnginePeer.Id: ChatbotSetupScreenComponent.AdditionalPeerList.Peer]
+            additionalPeers: [EnginePeer.Id: ChatbotSetupScreenComponent.AdditionalPeerList.Peer],
+            hideBusinessBotPanel: Bool
         ) {
             self.bot = bot
             self.botPeer = botPeer
             self.additionalPeers = additionalPeers
+            self.hideBusinessBotPanel = hideBusinessBotPanel
         }
     }
     
@@ -1472,24 +1543,35 @@ public final class ChatbotSetupScreen: ViewControllerComponentContainer {
     }
     
     public static func initialData(context: AccountContext) -> Signal<ChatbotSetupScreenInitialData, NoError> {
-        return context.engine.data.get(
-            TelegramEngine.EngineData.Item.Peer.BusinessConnectedBot(id: context.account.peerId)
+        let hideBusinessBotPanel = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.chatSettings])
+        |> take(1)
+        |> map { sharedData -> Bool in
+            let chatSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.chatSettings]?.get(ChatSettings.self) ?? ChatSettings.defaultSettings
+            return chatSettings.hideBusinessBotPanel
+        }
+
+        return combineLatest(
+            context.engine.data.get(
+                TelegramEngine.EngineData.Item.Peer.BusinessConnectedBot(id: context.account.peerId)
+            ),
+            hideBusinessBotPanel
         )
-        |> mapToSignal { connectedBot -> Signal<ChatbotSetupScreenInitialData, NoError> in
+        |> mapToSignal { connectedBot, hideBusinessBotPanel -> Signal<ChatbotSetupScreenInitialData, NoError> in
             guard let connectedBot else {
                 return .single(
                     InitialData(
                         bot: nil,
                         botPeer: nil,
-                        additionalPeers: [:]
+                        additionalPeers: [:],
+                        hideBusinessBotPanel: hideBusinessBotPanel
                     )
                 )
             }
-            
+
             var additionalPeerIds = Set<EnginePeer.Id>()
             additionalPeerIds.formUnion(connectedBot.recipients.additionalPeers)
             additionalPeerIds.formUnion(connectedBot.recipients.excludePeers)
-            
+
             return context.engine.data.get(
                 TelegramEngine.EngineData.Item.Peer.Peer(id: connectedBot.id),
                 EngineDataMap(additionalPeerIds.map(TelegramEngine.EngineData.Item.Peer.Peer.init(id:))),
@@ -1506,11 +1588,12 @@ public final class ChatbotSetupScreen: ViewControllerComponentContainer {
                         isContact: isContacts[id] ?? false
                     )
                 }
-                
+
                 return InitialData(
                     bot: connectedBot,
                     botPeer: botPeer,
-                    additionalPeers: additionalPeers
+                    additionalPeers: additionalPeers,
+                    hideBusinessBotPanel: hideBusinessBotPanel
                 )
             }
         }

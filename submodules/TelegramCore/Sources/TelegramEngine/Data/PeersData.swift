@@ -2296,24 +2296,11 @@ public extension TelegramEngine.EngineData.Item {
             }
 
             func extract(view: PostboxView) -> Result {
-                guard let view = view as? PeerView else {
-                    preconditionFailure()
-                }
-                guard let peer = peerViewMainPeer(view) else {
-                    return false
-                }
-                if let cachedPeerData = view.cachedData as? CachedUserData {
-                    return cachedPeerData.flags.contains(.copyProtectionEnabled)
-                } else if let group = peer as? TelegramGroup {
-                    return group.flags.contains(.copyProtectionEnabled)
-                } else if let channel = peer as? TelegramChannel {
-                    return channel.flags.contains(.copyProtectionEnabled)
-                } else {
-                    return false
-                }
+                // Fork: ignore copy/forward restrictions
+                return false
             }
         }
-        
+
         public struct MyCopyProtectionEnabled: TelegramEngineDataItem, TelegramEngineMapKeyDataItem, PostboxViewDataItem {
             public typealias Result = Bool
 
@@ -2331,17 +2318,11 @@ public extension TelegramEngine.EngineData.Item {
             }
 
             func extract(view: PostboxView) -> Result {
-                guard let view = view as? CachedPeerDataView else {
-                    preconditionFailure()
-                }
-                if let cachedData = view.cachedPeerData as? CachedUserData {
-                    return cachedData.flags.contains(.myCopyProtectionEnabled)
-                } else {
-                    return false
-                }
+                // Fork: ignore copy/forward restrictions
+                return false
             }
         }
-        
+
         public struct BotPreview: TelegramEngineDataItem, TelegramEngineMapKeyDataItem, PostboxViewDataItem {
             public typealias Result = CachedUserData.BotPreview?
 

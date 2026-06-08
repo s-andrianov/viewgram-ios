@@ -872,6 +872,16 @@ final class StarsTransactionsScreenComponent: Component {
             var subscriptionsItems: [AnyComponentWithIdentity<Empty>] = []
             if let subscriptionsState = self.subscriptionsState {
                 var subscriptions = subscriptionsState.subscriptions
+                // Viewgram: drop subscriptions the user swiped to hide.
+                let hiddenSubscriptionIds = ViewgramRuntimeSettings.hiddenStarSubscriptionIds
+                if !hiddenSubscriptionIds.isEmpty {
+                    subscriptions = subscriptions.filter { !hiddenSubscriptionIds.contains($0.id) }
+                }
+                // Viewgram: optionally drop expired subscriptions (past their untilDate).
+                if ViewgramRuntimeSettings.hideExpiredStarSubscriptionsEnabled {
+                    let nowTimestamp = Int32(CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970)
+                    subscriptions = subscriptions.filter { $0.untilDate > nowTimestamp }
+                }
                 var limit: Int32
                 if self.subscriptionsExpanded {
                     limit = 25 + self.subscriptionsMoreDisplayed
@@ -955,22 +965,37 @@ final class StarsTransactionsScreenComponent: Component {
                         labelComponent = AnyComponentWithIdentity(id: "label", component: AnyComponent(StarsLabelComponent(text: itemLabel, subtext: itemSublabel)))
                     }
                     
+                    let subscriptionId = subscription.id
                     subscriptionsItems.append(AnyComponentWithIdentity(
                         id: subscription.id,
                         component: AnyComponent(
-                            ListActionItemComponent(
+                            // Viewgram: swipe-left to reveal a "Hide" action.
+                            StarsSubscriptionSwipeItemComponent(
                                 theme: environment.theme,
-                                style: .glass,
-                                title: AnyComponent(VStack(titleComponents, alignment: .left, spacing: 2.0)),
-                                contentInsets: UIEdgeInsets(top: 9.0, left: 0.0, bottom: 8.0, right: 0.0),
-                                leftIcon: .custom(AnyComponentWithIdentity(id: "avatar", component: AnyComponent(StarsAvatarComponent(context: component.context, theme: environment.theme, peer: .transactionPeer(.peer(subscription.peer)), photo: nil, media: [], gift: nil, backgroundColor: environment.theme.list.plainBackgroundColor))), false),
-                                icon: nil,
-                                accessory: .custom(ListActionItemComponent.CustomAccessory(component: labelComponent, insets: UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 16.0))),
-                                action: { [weak self] _ in
-                                    guard let self, let component = self.component else {
+                                hideTitle: "Скрыть",
+                                content: AnyComponent(
+                                    ListActionItemComponent(
+                                        theme: environment.theme,
+                                        style: .glass,
+                                        title: AnyComponent(VStack(titleComponents, alignment: .left, spacing: 2.0)),
+                                        contentInsets: UIEdgeInsets(top: 9.0, left: 0.0, bottom: 8.0, right: 0.0),
+                                        leftIcon: .custom(AnyComponentWithIdentity(id: "avatar", component: AnyComponent(StarsAvatarComponent(context: component.context, theme: environment.theme, peer: .transactionPeer(.peer(subscription.peer)), photo: nil, media: [], gift: nil, backgroundColor: environment.theme.list.plainBackgroundColor))), false),
+                                        icon: nil,
+                                        accessory: .custom(ListActionItemComponent.CustomAccessory(component: labelComponent, insets: UIEdgeInsets(top: 0, left: 0, bottom: 0, right: 16.0))),
+                                        action: { [weak self] _ in
+                                            guard let self, let component = self.component else {
+                                                return
+                                            }
+                                            component.openSubscription(subscription)
+                                        }
+                                    )
+                                ),
+                                hideAction: { [weak self] in
+                                    guard let self else {
                                         return
                                     }
-                                    component.openSubscription(subscription)
+                                    ViewgramRuntimeSettings.hideStarSubscription(id: subscriptionId)
+                                    self.state?.updated(transition: .spring(duration: 0.4))
                                 }
                             )
                         )
