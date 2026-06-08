@@ -2107,7 +2107,6 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
                 }
                 
                 var audioTranscriptionProvidedByBoost = false
-                var autoTranslate = false
                 var isCopyProtectionEnabled: Bool = data.initialData?.peer?.isCopyProtectionEnabled ?? false
                 for entry in view.additionalData {
                     if case let .peer(_, maybePeer) = entry, let peer = maybePeer {
@@ -2115,7 +2114,6 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
                             isCopyProtectionEnabled = peer.isCopyProtectionEnabled
                         }
                         if let channel = peer as? TelegramChannel {
-                            autoTranslate = channel.flags.contains(.autoTranslateEnabled)
                             if let boostLevel = channel.approximateBoostLevel, boostLevel >= premiumConfiguration.minGroupAudioTranscriptionLevel {
                                 audioTranscriptionProvidedByBoost = true
                             }
@@ -2133,7 +2131,8 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
                 )
                 
                 var translateToLanguage: (fromLang: String, toLang: String)?
-                if let translationState, (isPremium || autoTranslate)  && translationState.isEnabled {
+                // Viewgram: chat translation unlocked for everyone (no premium gate).
+                if let translationState, translationState.isEnabled {
                     var languageCode = translationState.toLang ?? chatPresentationData.strings.baseLanguageCode
                     let rawSuffix = "-raw"
                     if languageCode.hasSuffix(rawSuffix) {
