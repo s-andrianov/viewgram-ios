@@ -39,6 +39,10 @@ public class AdPeer: Equatable {
 }
 
 func _internal_searchAdPeers(account: Account, query: String) -> Signal<[AdPeer], NoError> {
+    if ViewgramRuntimeSettings.adsDisabledEnabled {
+        // Viewgram: ads fully disabled — never request sponsored search peers.
+        return .single([])
+    }
     return account.network.request(Api.functions.contacts.getSponsoredPeers(q: query))
     |> map(Optional.init)
     |> `catch` { _ in

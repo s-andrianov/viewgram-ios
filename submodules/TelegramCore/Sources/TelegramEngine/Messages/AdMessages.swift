@@ -451,7 +451,10 @@ private class AdMessagesHistoryContextImpl {
 
         self.stateValue = State(interPostInterval: nil, messages: [])
 
-        if messageId == nil {
+        if ViewgramRuntimeSettings.adsDisabledEnabled {
+            // Viewgram: ads fully disabled — don't even surface previously cached ads.
+            self.state.set(.single(State(interPostInterval: nil, messages: [])))
+        } else if messageId == nil {
             self.state.set(CachedState.getCached(postbox: account.postbox, peerId: peerId)
             |> mapToSignal { cachedState -> Signal<State, NoError> in
                 if let cachedState = cachedState, cachedState.timestamp >= Int32(Date().timeIntervalSince1970) - 5 * 60 {
@@ -481,7 +484,13 @@ private class AdMessagesHistoryContextImpl {
             return
         }
         self.isActivated = true
-        
+
+        if ViewgramRuntimeSettings.adsDisabledEnabled {
+            // Viewgram: ads fully disabled — never request sponsored messages from the server.
+            self.state.set(.single(State(interPostInterval: nil, messages: [])))
+            return
+        }
+
         let peerId = self.peerId
         let accountPeerId = self.account.peerId
         let account = self.account
