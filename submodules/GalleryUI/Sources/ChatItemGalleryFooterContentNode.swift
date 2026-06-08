@@ -856,7 +856,8 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
         }
         var canFullscreen = false
         var canDelete: Bool
-        var canShare = !message.containsSecretMedia && !Namespaces.Message.allNonRegular.contains(message.id.namespace) && message.adAttribute == nil
+        // Fork: allow saving/sharing self-destruct (view-once) media — removed !message.containsSecretMedia guard
+        var canShare = !Namespaces.Message.allNonRegular.contains(message.id.namespace) && message.adAttribute == nil
                 
         var canEdit = false
         var isImage = false
@@ -936,7 +937,8 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             canEdit = false
         }
         
-        if message.isCopyProtected() || peerIsCopyProtected || message.paidContent != nil {
+        // Viewgram: allow saving/sharing already-purchased paid content (drop paidContent gate).
+        if message.isCopyProtected() || peerIsCopyProtected {
             canShare = false
             canEdit = false
         }
@@ -1896,10 +1898,8 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
                         
                         var hasExternalShare = true
                         for media in currentMessage.media {
-                            if let _ = media as? TelegramMediaPaidContent {
-                                hasExternalShare = false
-                                break
-                            } else if let invoice = media as? TelegramMediaInvoice, let _ = invoice.extendedMedia {
+                            // Viewgram: allow external share of already-purchased paid content.
+                            if let invoice = media as? TelegramMediaInvoice, let _ = invoice.extendedMedia {
                                 hasExternalShare = false
                                 break
                             }

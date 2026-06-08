@@ -288,7 +288,8 @@ public func galleryItemForEntry(
     
     if let image = media as? TelegramMediaImage {
         if let file = image.video {
-            let captureProtected = message.isCopyProtected() || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil || peerIsCopyProtected
+            // Viewgram: allow screenshots of already-purchased paid content (drop paidContent protection).
+            let captureProtected = message.isCopyProtected() || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || peerIsCopyProtected
             
             var originData = GalleryItemOriginData(title: message.effectiveAuthor.flatMap(EnginePeer.init)?.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder), timestamp: message.timestamp)
             if Namespaces.Message.allNonRegular.contains(message.id.namespace) {
@@ -345,7 +346,8 @@ public func galleryItemForEntry(
     } else if let file = media as? TelegramMediaFile {
         if file.isVideo {
             let content: UniversalVideoContent
-            let captureProtected = message.isCopyProtected() || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil || peerIsCopyProtected
+            // Viewgram: allow screenshots of already-purchased paid content (drop paidContent protection).
+            let captureProtected = message.isCopyProtected() || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || peerIsCopyProtected
             if file.isAnimated {
                 content = NativeVideoContent(id: .message(message.stableId, file.fileId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: file), imageReference: mediaImage.flatMap({ ImageMediaReference.message(message: MessageReference(message), media: $0) }), loopVideo: true, enableSound: false, tempFilePath: tempFilePath, captureProtected: captureProtected, storeAfterDownload: generateStoreAfterDownload?(message, file))
             } else {
@@ -1424,19 +1426,6 @@ public class GalleryController: ViewController, StandalonePresentableController,
         self.acceptsFocusWhenInOverlay = true
         self.isOpaqueWhenInOverlay = true
         
-        switch source {
-        case let .peerMessagesAtId(id, _, _, _):
-            if id.peerId.namespace == Namespaces.Peer.SecretChat {
-                self.screenCaptureEventsDisposable = (screenCaptureEvents()
-                |> deliverOnMainQueue).start(next: { [weak self] _ in
-                    if let strongSelf = self, strongSelf.traceVisibility() {
-                        let _ = strongSelf.context.engine.messages.addSecretChatMessageScreenshot(peerId: id.peerId).start()
-                    }
-                }).strict()
-            }
-        default:
-            break
-        }
     }
     
     required init(coder aDecoder: NSCoder) {

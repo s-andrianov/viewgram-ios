@@ -449,7 +449,8 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.translateToLanguage = translateToLanguage
         self.peerIsCopyProtected = peerIsCopyProtected
         self.isSecret = isSecret
-        self.imageNode.captureProtected = message.id.peerId.namespace == Namespaces.Peer.SecretChat || message.isCopyProtected() || peerIsCopyProtected || isSecret || message.paidContent != nil
+        // Viewgram: allow screenshots of already-purchased paid content (drop paidContent protection).
+        self.imageNode.captureProtected = message.id.peerId.namespace == Namespaces.Peer.SecretChat || message.isCopyProtected() || peerIsCopyProtected || isSecret
         self.updateFooter(animated: false)
         
         var title: String?
