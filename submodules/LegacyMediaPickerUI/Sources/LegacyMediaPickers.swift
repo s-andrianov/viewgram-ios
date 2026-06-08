@@ -455,7 +455,7 @@ public func legacyAssetPickerEnqueueMessages(
                                         defer {
                                             TempBox.shared.dispose(tempFile)
                                         }
-                                        if let scaledImageData = compressImageToJPEG(scaledImage, quality: 0.6, tempFilePath: tempFile.path) {
+                                        if let scaledImageData = compressImageToJPEG(scaledImage, quality: ViewgramRuntimeSettings.mediaCompressionPhotoQuality, tempFilePath: tempFile.path) {
                                             let _ = try? scaledImageData.write(to: URL(fileURLWithPath: tempFilePath))
 
                                             let resource = LocalFileReferenceMediaResource(localFilePath: tempFilePath, randomId: randomId)

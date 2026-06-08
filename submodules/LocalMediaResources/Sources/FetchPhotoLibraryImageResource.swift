@@ -3,6 +3,7 @@ import UIKit
 import Photos
 import Postbox
 import SwiftSignalKit
+import TelegramCore
 import ImageCompression
 import Accelerate.vImage
 import CoreImage
@@ -182,7 +183,7 @@ public func fetchPhotoLibraryResource(localIdentifier: String, width: Int32?, he
                                     defer {
                                         TempBox.shared.dispose(tempFile)
                                     }
-                                    if let scaledImage = scaledImage, let data = compressImageToJPEG(scaledImage, quality: 0.6, tempFilePath: tempFile.path) {
+                                    if let scaledImage = scaledImage, let data = compressImageToJPEG(scaledImage, quality: ViewgramRuntimeSettings.mediaCompressionPhotoQuality, tempFilePath: tempFile.path) {
     #if DEBUG
                                         print("compression completion \((CACurrentMediaTime() - startTime) * 1000.0) ms")
     #endif
