@@ -145,7 +145,7 @@ private final class ViewgramMediaQualitySliderItemNode: ListViewItemNode {
             let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
             let layoutSize = layout.size
 
-            return { [weak self] in
+            return (layout, { [weak self] in
                 guard let strongSelf = self else {
                     return
                 }
@@ -249,7 +249,7 @@ private final class ViewgramMediaQualitySliderItemNode: ListViewItemNode {
 
                     strongSelf.updateSliderView()
                 }
-            }
+            })
         }
     }
 
