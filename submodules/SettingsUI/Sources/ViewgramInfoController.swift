@@ -2,11 +2,13 @@ import Foundation
 import UIKit
 import Display
 import SwiftSignalKit
+import Postbox
 import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
 import ItemListUI
 import ItemListPeerItem
+import ChatListUI
 import PresentationDataUtils
 import AccountContext
 import UndoUI
@@ -45,10 +47,111 @@ private final class ViewgramInfoControllerArguments {
 }
 
 /// A resolved Viewgram link peer (avatar + optional subscriber count) for the
-/// rich `ItemListPeerItem` rows in the links section.
+/// rich `ItemListPeerItem` rows in the contacts section.
 private struct ViewgramResolvedLink: Equatable {
     var peer: EnginePeer?
     var subscribers: Int?
+}
+
+/// Data for the "Новости" island — the Viewgram channel rendered like the
+/// personal-channel widget in a profile (avatar + name + last post preview).
+private struct ViewgramNewsData: Equatable {
+    var peer: EngineRenderedPeer?
+    var messages: [EngineMessage]
+    var subscribers: Int?
+    var storyStats: PeerStoryStats?
+    var isLoading: Bool
+
+    static func ==(lhs: ViewgramNewsData, rhs: ViewgramNewsData) -> Bool {
+        if lhs.peer?.peerId != rhs.peer?.peerId { return false }
+        if lhs.subscribers != rhs.subscribers { return false }
+        if lhs.isLoading != rhs.isLoading { return false }
+        if lhs.messages.map({ $0.id }) != rhs.messages.map({ $0.id }) { return false }
+        if lhs.messages.map({ $0.stableVersion }) != rhs.messages.map({ $0.stableVersion }) { return false }
+        if lhs.storyStats != rhs.storyStats { return false }
+        return true
+    }
+}
+
+/// Builds the "Новости" row as a `ChatListItem` (channel avatar + name + last
+/// post preview), mirroring the profile personal-channel widget. Falls back to
+/// a plain disclosure row until the channel resolves.
+private func viewgramNewsItem(context: AccountContext, section: ItemListSectionId, data: ViewgramNewsData?, openChannel: @escaping () -> Void) -> ListViewItem {
+    guard let data, let renderedPeer = data.peer, renderedPeer.peer != nil else {
+        return ItemListDisclosureItem(presentationData: ItemListPresentationData(context.sharedContext.currentPresentationData.with { $0 }), title: "Канал @\(viewgramChannelUsername)", label: "", sectionId: section, style: .blocks, action: openChannel)
+    }
+    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+    let chatListPresentationData = ChatListPresentationData(
+        theme: presentationData.theme,
+        fontSize: presentationData.listsFontSize,
+        strings: presentationData.strings,
+        dateTimeFormat: presentationData.dateTimeFormat,
+        nameSortOrder: presentationData.nameSortOrder,
+        nameDisplayOrder: presentationData.nameDisplayOrder,
+        disableAnimations: false
+    )
+
+    let interaction = ChatListNodeInteraction(context: context, animationCache: context.animationCache, animationRenderer: context.animationRenderer, activateSearch: {}, peerSelected: { _, _, _, _, _ in openChannel() }, disabledPeerSelected: { _, _, _ in }, togglePeerSelected: { _, _ in }, togglePeersSelection: { _, _ in }, additionalCategorySelected: { _ in }, messageSelected: { _, _, _, _ in }, groupSelected: { _ in }, addContact: { _ in }, setPeerIdWithRevealedOptions: { _, _ in }, setItemPinned: { _, _ in }, setPeerMuted: { _, _ in }, setPeerThreadMuted: { _, _, _ in }, deletePeer: { _, _ in }, deletePeerThread: { _, _ in }, setPeerThreadStopped: { _, _, _ in }, setPeerThreadPinned: { _, _, _ in }, setPeerThreadHidden: { _, _, _ in }, updatePeerGrouping: { _, _ in }, togglePeerMarkedUnread: { _, _ in }, toggleArchivedFolderHiddenByDefault: {}, toggleThreadsSelection: { _, _ in }, hidePsa: { _ in }, activateChatPreview: nil, present: { _ in }, openForumThread: { _, _ in }, openStorageManagement: {}, openPasswordSetup: {}, openPremiumIntro: {}, openPremiumGift: { _, _ in }, openPremiumManagement: {}, openActiveSessions: {}, openBirthdaySetup: {}, performActiveSessionAction: { _, _ in }, openChatFolderUpdates: {}, hideChatFolderUpdates: {}, openStories: { _, _ in }, openStarsTopup: { _ in }, editPeer: { _ in }, openWebApp: { _ in }, openPhotoSetup: {}, openAdInfo: { _, _ in }, openAccountFreezeInfo: {}, openUrl: { _ in })
+
+    let index: EngineChatList.Item.Index
+    let messages: [EngineMessage]
+    if !data.isLoading, !data.messages.isEmpty {
+        index = EngineChatList.Item.Index.chatList(ChatListIndex(pinningIndex: nil, messageIndex: data.messages[0].index))
+        messages = data.messages
+    } else {
+        index = EngineChatList.Item.Index.chatList(ChatListIndex(pinningIndex: nil, messageIndex: MessageIndex(id: MessageId(peerId: renderedPeer.peerId, namespace: Namespaces.Message.Cloud, id: 1), timestamp: 0)))
+        messages = []
+    }
+
+    return ChatListItem(
+        presentationData: chatListPresentationData,
+        context: context,
+        chatListLocation: .chatList(groupId: .root),
+        filterData: nil,
+        index: index,
+        content: .peer(ChatListItemContent.PeerData(
+            messages: messages,
+            peer: renderedPeer,
+            threadInfo: nil,
+            combinedReadState: nil,
+            isRemovedFromTotalUnreadCount: false,
+            presence: nil,
+            hasUnseenMentions: false,
+            hasUnseenReactions: false,
+            hasUnseenPollVotes: false,
+            draftState: nil,
+            mediaDraftContentType: nil,
+            inputActivities: nil,
+            promoInfo: nil,
+            ignoreUnreadBadge: false,
+            displayAsMessage: false,
+            hasFailedMessages: false,
+            forumTopicData: nil,
+            topForumTopicItems: [],
+            autoremoveTimeout: nil,
+            storyState: data.storyStats.flatMap { storyStats in
+                return ChatListItemContent.StoryState(stats: storyStats, hasUnseenCloseFriends: false)
+            },
+            requiresPremiumForMessaging: false,
+            displayAsTopicList: false,
+            tags: [],
+            customMessageListData: ChatListItemContent.CustomMessageListData(
+                commandPrefix: nil,
+                searchQuery: nil,
+                messageCount: nil,
+                hideSeparator: true,
+                hideDate: data.isLoading,
+                hidePeerStatus: false
+            )
+        )),
+        editing: false,
+        hasActiveRevealControls: false,
+        selected: false,
+        header: nil,
+        enabledContextActions: nil,
+        hiddenOffset: false,
+        interaction: interaction
+    )
 }
 
 private struct ViewgramInfoState: Equatable {
@@ -62,6 +165,7 @@ private struct ViewgramInfoState: Equatable {
 private enum ViewgramInfoSection: Int32 {
     case settings
     case mediaQuality
+    case news
     case links
     case verification
 }
@@ -78,11 +182,12 @@ private enum ViewgramInfoEntry: ItemListNodeEntry {
     case mediaQualityHeader
     case mediaQuality(Int)
     case mediaQualityFooter
+    case newsHeader
+    case news(ViewgramNewsData?)
     case linksHeader
-    case channel(EnginePeer?, Int?)
-    case bot(EnginePeer?)
-    case developerChannel(EnginePeer?, Int?)
     case developer(EnginePeer?)
+    case developerChannel(EnginePeer?, Int?)
+    case bot(EnginePeer?)
     case verificationHeader
     case refresh
     case verificationFooter
@@ -93,7 +198,9 @@ private enum ViewgramInfoEntry: ItemListNodeEntry {
             return ViewgramInfoSection.settings.rawValue
         case .mediaQualityHeader, .mediaQuality, .mediaQualityFooter:
             return ViewgramInfoSection.mediaQuality.rawValue
-        case .linksHeader, .channel, .bot, .developerChannel, .developer:
+        case .newsHeader, .news:
+            return ViewgramInfoSection.news.rawValue
+        case .linksHeader, .developer, .developerChannel, .bot:
             return ViewgramInfoSection.links.rawValue
         case .verificationHeader, .refresh, .verificationFooter:
             return ViewgramInfoSection.verification.rawValue
@@ -113,14 +220,15 @@ private enum ViewgramInfoEntry: ItemListNodeEntry {
         case .mediaQualityHeader: return 8
         case .mediaQuality: return 9
         case .mediaQualityFooter: return 10
-        case .linksHeader: return 11
-        case .channel: return 12
-        case .bot: return 13
-        case .developerChannel: return 14
-        case .developer: return 15
-        case .verificationHeader: return 16
-        case .refresh: return 17
-        case .verificationFooter: return 18
+        case .newsHeader: return 11
+        case .news: return 12
+        case .linksHeader: return 13
+        case .developer: return 14
+        case .developerChannel: return 15
+        case .bot: return 16
+        case .verificationHeader: return 17
+        case .refresh: return 18
+        case .verificationFooter: return 19
         }
     }
 
@@ -167,16 +275,18 @@ private enum ViewgramInfoEntry: ItemListNodeEntry {
             })
         case .mediaQualityFooter:
             return ItemListTextItem(presentationData: presentationData, text: .plain("Сила сжатия фото и видео при отправке. 40% — максимальная экономия трафика (видео ~480p), 100% — лучшее качество (видео до 1080p). По умолчанию 60%."), sectionId: self.section)
+        case .newsHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "НОВОСТИ", sectionId: self.section)
+        case let .news(data):
+            return viewgramNewsItem(context: arguments.context, section: self.section, data: data, openChannel: { arguments.openChannel() })
         case .linksHeader:
-            return ItemListSectionHeaderItem(presentationData: presentationData, text: "VIEWGRAM", sectionId: self.section)
-        case let .channel(peer, subscribers):
-            return viewgramLinkItem(presentationData: presentationData, context: arguments.context, section: self.section, peer: peer, subscribers: subscribers, fallbackTitle: "Канал @\(viewgramChannelUsername)", action: { arguments.openChannel() })
-        case let .bot(peer):
-            return viewgramLinkItem(presentationData: presentationData, context: arguments.context, section: self.section, peer: peer, subscribers: nil, fallbackTitle: "Бот @\(viewgramBotUsername)", action: { arguments.openBot() })
-        case let .developerChannel(peer, subscribers):
-            return viewgramLinkItem(presentationData: presentationData, context: arguments.context, section: self.section, peer: peer, subscribers: subscribers, fallbackTitle: "Канал разработчика @\(viewgramDeveloperChannelUsername)", action: { arguments.openDeveloperChannel() })
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "КОНТАКТЫ", sectionId: self.section)
         case let .developer(peer):
             return viewgramLinkItem(presentationData: presentationData, context: arguments.context, section: self.section, peer: peer, subscribers: nil, fallbackTitle: "Разработчик @\(viewgramDeveloperUsername)", action: { arguments.openDeveloper() })
+        case let .developerChannel(peer, subscribers):
+            return viewgramLinkItem(presentationData: presentationData, context: arguments.context, section: self.section, peer: peer, subscribers: subscribers, fallbackTitle: "Канал разработчика @\(viewgramDeveloperChannelUsername)", action: { arguments.openDeveloperChannel() })
+        case let .bot(peer):
+            return viewgramLinkItem(presentationData: presentationData, context: arguments.context, section: self.section, peer: peer, subscribers: nil, fallbackTitle: "Бот @\(viewgramBotUsername)", action: { arguments.openBot() })
         case .verificationHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "ВЕРИФИКАЦИЯ", sectionId: self.section)
         case .refresh:
@@ -222,7 +332,7 @@ private func viewgramLinkItem(presentationData: ItemListPresentationData, contex
     )
 }
 
-private func viewgramInfoControllerEntries(state: ViewgramInfoState, hideBotPanel: Bool, links: [ViewgramResolvedLink]) -> [ViewgramInfoEntry] {
+private func viewgramInfoControllerEntries(state: ViewgramInfoState, hideBotPanel: Bool, news: ViewgramNewsData?, contacts: [ViewgramResolvedLink]) -> [ViewgramInfoEntry] {
     return [
         .settingsHeader,
         .invisible(state.invisibleEnabled),
@@ -235,11 +345,12 @@ private func viewgramInfoControllerEntries(state: ViewgramInfoState, hideBotPane
         .mediaQualityHeader,
         .mediaQuality(state.mediaCompressionLevel),
         .mediaQualityFooter,
+        .newsHeader,
+        .news(news),
         .linksHeader,
-        .channel(links[0].peer, links[0].subscribers),
-        .bot(links[1].peer),
-        .developerChannel(links[2].peer, links[2].subscribers),
-        .developer(links[3].peer),
+        .developer(contacts[0].peer),
+        .developerChannel(contacts[1].peer, contacts[1].subscribers),
+        .bot(contacts[2].peer),
         .verificationHeader,
         .refresh,
         .verificationFooter
@@ -363,18 +474,63 @@ public func viewgramInfoController(context: AccountContext) -> ViewController {
         }
     }
 
-    let linksSignal: Signal<[ViewgramResolvedLink], NoError> = combineLatest([
-        resolveLink(viewgramChannelUsername, true),
-        resolveLink(viewgramBotUsername, false),
+    // "Контакты" island: developer, developer's channel, bot — order matters (indices used in entries).
+    let contactsSignal: Signal<[ViewgramResolvedLink], NoError> = combineLatest([
+        resolveLink(viewgramDeveloperUsername, false),
         resolveLink(viewgramDeveloperChannelUsername, true),
-        resolveLink(viewgramDeveloperUsername, false)
+        resolveLink(viewgramBotUsername, false)
     ])
 
-    let signal = combineLatest(queue: .mainQueue(), context.sharedContext.presentationData, statePromise.get(), hideBotPanelSignal, linksSignal)
+    // "Новости" island: the Viewgram channel with its last post (profile-style),
+    // built by fetching the channel's rendered peer, subscriber count, story stats
+    // and the top of its message history.
+    let newsSignal: Signal<ViewgramNewsData?, NoError> = context.engine.peers.resolvePeerByName(name: viewgramChannelUsername, referrer: nil)
+    |> mapToSignal { result -> Signal<ViewgramNewsData?, NoError> in
+        guard case let .result(maybePeer) = result, let channelPeer = maybePeer else {
+            return .single(nil)
+        }
+        let channelId = channelPeer.id
+        let polledChannel: Signal<Void, NoError> = Signal<Void, NoError>.single(Void())
+        |> then(
+            context.account.viewTracker.polledChannel(peerId: channelId)
+            |> ignoreValues
+            |> map { _ -> Void in }
+        )
+        return combineLatest(
+            context.engine.data.subscribe(
+                TelegramEngine.EngineData.Item.Peer.RenderedPeer(id: channelId),
+                TelegramEngine.EngineData.Item.Peer.ParticipantCount(id: channelId),
+                TelegramEngine.EngineData.Item.Peer.StoryStats(id: channelId)
+            ),
+            context.account.postbox.aroundMessageHistoryViewForLocation(.peer(peerId: channelId, threadId: nil), anchor: .upperBound, ignoreMessagesInTimestampRange: nil, ignoreMessageIds: Set(), count: 10, clipHoles: false, fixedCombinedReadStates: nil, topTaggedMessageIdNamespaces: Set(), tag: nil, appendMessagesFromTheSameGroup: false, namespaces: .not(Namespaces.Message.allNonRegular), orderStatistics: []),
+            polledChannel
+        )
+        |> map { peerData, viewData, _ -> ViewgramNewsData? in
+            let (renderedPeer, participantCount, storyStats) = peerData
+            let (view, _, _) = viewData
+            var messages: [EngineMessage] = []
+            for i in (0 ..< view.entries.count).reversed() {
+                if messages.isEmpty {
+                    messages.append(EngineMessage(view.entries[i].message))
+                } else if messages[0].groupingKey != nil && messages[0].groupingKey == view.entries[i].message.groupingKey {
+                    messages.append(EngineMessage(view.entries[i].message))
+                }
+            }
+            messages = messages.reversed()
+            var isLoading = false
+            if messages.isEmpty && view.isLoading {
+                isLoading = true
+            }
+            return ViewgramNewsData(peer: renderedPeer, messages: messages, subscribers: participantCount, storyStats: storyStats, isLoading: isLoading)
+        }
+    }
+
+    let signal = combineLatest(queue: .mainQueue(), context.sharedContext.presentationData, statePromise.get(), hideBotPanelSignal, combineLatest(newsSignal, contactsSignal))
     |> deliverOnMainQueue
-    |> map { presentationData, state, hideBotPanel, links -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, state, hideBotPanel, newsAndContacts -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let (news, contacts) = newsAndContacts
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("Viewgram"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: viewgramInfoControllerEntries(state: state, hideBotPanel: hideBotPanel, links: links), style: .blocks, animateChanges: false)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: viewgramInfoControllerEntries(state: state, hideBotPanel: hideBotPanel, news: news, contacts: contacts), style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
     }
     |> afterDisposed {
